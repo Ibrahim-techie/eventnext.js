@@ -168,21 +168,29 @@
   }
 
   .events {
-    @apply grid md:grid-cols-3 gap-10 sm:grid-cols-2 grid-cols-1;
+    @apply grid list-none grid-cols-1 gap-x-7 gap-y-12 sm:grid-cols-2 lg:grid-cols-3;
   }
 
-  #event-card {
+  .event-card {
     @apply flex flex-col gap-3;
 
     .poster {
-      @apply h-[300px] w-full rounded-lg object-cover;
+      @apply aspect-[16/9] h-auto w-full rounded-lg object-cover;
+    }
+
+    .location {
+      @apply flex min-w-0 flex-row items-center gap-2;
+
+      p {
+        @apply truncate;
+      }
     }
 
     .title {
-      @apply text-[20px] font-semibold line-clamp-1;
+      @apply line-clamp-2 text-[20px] font-semibold;
     }
 
-    p {
+    .description {
       @apply text-light-200 text-sm font-light;
     }
 
@@ -192,6 +200,10 @@
       div {
         @apply flex flex-row gap-2;
       }
+    }
+
+    &:focus-visible {
+      @apply rounded-lg outline-2 outline-offset-4 outline-primary;
     }
   }
 

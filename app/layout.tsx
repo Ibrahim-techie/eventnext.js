@@ -7,6 +7,7 @@ import {
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import LightRays from "../components/LightRays";
+import Navbar from "@/components/Navbar";
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
@@ -41,7 +42,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       )}
     >
       <body className="min-h-screen flex flex-col">
+        <Navbar />
       <div className="absolute inset-0 z-[-1] min-h-screen">
+
         <LightRays
             raysOrigin="top-center"
             raysColor="#5dfeca"
