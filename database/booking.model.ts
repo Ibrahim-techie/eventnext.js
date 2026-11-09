@@ -37,8 +37,8 @@ const bookingSchema = new mongoose.Schema<Booking>(
   { timestamps: true },
 );
 
-bookingSchema.index({ eventId: 1 });
-
+// Ensure an email address can book each event only once.
+bookingSchema.index({ eventId: 1, email: 1 }, { unique: true });
 bookingSchema.pre("save", async function () {
   // Validate the reference before MongoDB persists the booking.
   const eventExists = await Event.exists({ _id: this.eventId });

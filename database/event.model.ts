@@ -82,6 +82,53 @@ const normalizeTime = (value: string): string => {
   return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 };
 
+const normalizeDate = (value: string): string => {
+  const trimmed = value.trim();
+  const compactRange = trimmed.match(
+    /^([A-Za-z]+)\s+(\d{1,2})-(\d{1,2}),\s*(\d{4})$/,
+  );
+  const expandedRange = trimmed.match(
+    /^([A-Za-z]+)\s+(\d{1,2})\s*-\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/,
+  );
+
+  const toIsoDate = (date: string): string => {
+    const parsedDate = new Date(date);
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new Error("Event date must be a valid date.");
+    }
+    return parsedDate.toISOString().slice(0, 10);
+  };
+
+  if (compactRange) {
+    const [, month, startDay, endDay, year] = compactRange;
+    return `${toIsoDate(`${month} ${startDay}, ${year}`)}/${toIsoDate(
+      `${month} ${endDay}, ${year}`,
+    )}`;
+  }
+
+  if (expandedRange) {
+    const [, startMonth, startDay, endMonth, endDay, year] = expandedRange;
+    return `${toIsoDate(`${startMonth} ${startDay}, ${year}`)}/${toIsoDate(
+      `${endMonth} ${endDay}, ${year}`,
+    )}`;
+  }
+
+  return toIsoDate(trimmed);
+};
+
+const normalizeTimeRange = (value: string): string => {
+  const parts = value
+    .trim()
+    .split(/\s+[-–]\s+/)
+    .map((part) => normalizeTime(part));
+
+  if (parts.length > 2 || parts.length === 0) {
+    throw new Error("Event time must be a valid time or time range.");
+  }
+
+  return parts.join(" - ");
+};
+
 const eventSchema = new mongoose.Schema<Event>(
   {
     title: nonEmptyString,
@@ -114,14 +161,9 @@ eventSchema.pre("save", async function () {
     this.slug = slug;
   }
 
-  // Store dates as ISO strings and times as 24-hour HH:mm values.
-  const parsedDate = new Date(this.date);
-  if (Number.isNaN(parsedDate.getTime())) {
-    throw new Error("Event date must be a valid date.");
-  }
-  this.date = parsedDate.toISOString();
-
-  this.time = normalizeTime(this.time);
+  // Preserve ranges while storing each date and time endpoint consistently.
+  this.date = normalizeDate(this.date);
+  this.time = normalizeTimeRange(this.time);
 });
 
 export const Event: Model<Event> =
