@@ -13,6 +13,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
+    "mongoose": "^8.19.1",
     "next": "16.4.5",
     "ogl": "^1.0.11",
     "react": "19.3.0",
