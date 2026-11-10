@@ -1,8 +1,21 @@
+"use cache";
 import EeventCard from "@/components/EeventCard";
 import { Explorebtn } from "@/components/Explorebtn";
-import { events } from "@/lib/constants";
+import { IEvent } from "@/database/event.model";
 
-const page = () => {
+const page = async () => {
+      let events: IEvent[] = [];
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/events`);
+
+    if (res.ok) {
+      const result = await res.json();
+      events = result.events;
+    }
+  } catch (err) {
+    console.error("Error fetching events:", err);
+  }
+
   return (
     <section id="home">
       <h1 className="text-3xl font-bold underline text-center ">
@@ -19,19 +32,23 @@ const page = () => {
         <h3>Featured Events</h3>
 
         <ul className="events">
-          {events.map((event) => (
-            <li key={event.title}>
-              <EeventCard
-                title={event.title}
-                imageUrl={event.imageUrl}
-                description={event.description}
-                slug={event.slug}
-                location={event.location}
-                date={event.date}
-                time={event.time}
-              />
-            </li>
-          ))}
+          {events.length == 0 ? (
+            <p className="text-center">No Events Found</p>
+          ) : (
+            events.map((event: IEvent) => (
+              <li key={event.title}>
+                <EeventCard
+                  title={event.title}
+                  imageUrl={event.image}
+                  description={event.description}
+                  slug={event.slug}
+                  location={event.location}
+                  date={event.date}
+                  time={event.time}
+                />
+              </li>
+            ))
+          )}
         </ul>
       </div>
     </section>
