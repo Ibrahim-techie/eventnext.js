@@ -92,10 +92,48 @@ const normalizeDate = (value: string): string => {
   );
 
   const toIsoDate = (date: string): string => {
-    const parsedDate = new Date(date);
-    if (Number.isNaN(parsedDate.getTime())) {
+    const namedDate = date.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+    const isoDate = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    let year: number;
+    let month: number;
+    let day: number;
+
+    if (namedDate) {
+      const monthIndex = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+      ].indexOf(namedDate[1].toLowerCase());
+      year = Number(namedDate[3]);
+      month = monthIndex;
+      day = Number(namedDate[2]);
+    } else if (isoDate) {
+      year = Number(isoDate[1]);
+      month = Number(isoDate[2]) - 1;
+      day = Number(isoDate[3]);
+    } else {
       throw new Error("Event date must be a valid date.");
     }
+
+    const parsedDate = new Date(Date.UTC(year, month, day));
+    if (
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.getUTCFullYear() !== year ||
+      parsedDate.getUTCMonth() !== month ||
+      parsedDate.getUTCDate() !== day
+    ) {
+      throw new Error("Event date must be a valid date.");
+    }
+
     return parsedDate.toISOString().slice(0, 10);
   };
 
@@ -132,7 +170,7 @@ const normalizeTimeRange = (value: string): string => {
 const eventSchema = new mongoose.Schema<Event>(
   {
     title: nonEmptyString,
-    slug: { type: String, unique: true, trim: true },
+    slug: { type: String, trim: true },
     description: nonEmptyString,
     overview: nonEmptyString,
     image: nonEmptyString,
@@ -144,7 +182,7 @@ const eventSchema = new mongoose.Schema<Event>(
     audience: nonEmptyString,
     agenda: nonEmptyStringArray,
     organizer: nonEmptyString,
-    tags: nonEmptyStringArray,
+    tags: { type: [String], default: [] },
   },
   { timestamps: true },
 );
