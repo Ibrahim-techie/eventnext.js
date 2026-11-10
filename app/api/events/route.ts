@@ -1,268 +1,186 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
-import { Event } from "@/database";
-import connectToDatabase from "@/lib/mongodb";
+import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
-// Every value sent for a key, so repeated keys (agenda=a, agenda=b) are kept.
-type Fields = Map<string, FormDataEntryValue[]>;
+import connectDB from "@/lib/mongodb";
+import Event from "@/database/event.model";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "image/avif": ".avif",
+
+// Every error response uses the same shape: { message, ...details }.
+const fail = (status: number, message: string, details?: object) =>
+  NextResponse.json({ message, ...details }, { status });
+
+function configureCloudinary(): boolean {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) return false;
+
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+  });
+  return true;
+}
+
+async function uploadImage(file: File): Promise<UploadApiResponse> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        { folder: "eventnextjs/images", resource_type: "image" },
+        (error, result) => {
+          if (error) return reject(error);
+          if (!result) return reject(new Error("Cloudinary returned no upload result."));
+          resolve(result);
+        },
+      )
+      .end(buffer);
+  });
+}
+
+const getText = (formData: FormData, name: string): string => {
+  const value = formData.get(name);
+  return typeof value === "string" ? value.trim() : "";
 };
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
-class BadRequestError extends Error {}
-
-const isString = (value: FormDataEntryValue): value is string =>
-  typeof value === "string";
-
-const readFields = async (request: NextRequest): Promise<Fields> => {
-  const fields: Fields = new Map();
-  const add = (rawKey: string, value: FormDataEntryValue) => {
-    // Tolerate stray spaces and a trailing [] in key names (e.g. "agenda[]").
-    const key = rawKey.trim().replace(/\[\]$/, "");
-    fields.set(key, [...(fields.get(key) ?? []), value]);
-  };
-
-  const contentType = request.headers.get("content-type") ?? "";
-
-  if (contentType.includes("application/json")) {
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      throw new BadRequestError("Request body must be a JSON object");
-    }
-    for (const [key, value] of Object.entries(body)) {
-      for (const item of Array.isArray(value) ? value : [value]) {
-        if (typeof item === "string") add(key, item);
-      }
-    }
-  } else {
-    const formData = await request.formData();
-    for (const [key, value] of formData.entries()) add(key, value);
-  }
-
-  return fields;
-};
-
-const getText = (fields: Fields, name: string): string =>
-  fields.get(name)?.find(isString)?.trim() ?? "";
-
-const getList = (fields: Fields, name: string): string[] => {
-  const values = (fields.get(name) ?? []).filter(isString);
+// Accepts a JSON array ('["a","b"]'), a comma/newline separated string
+// ("a, b"), or the same key repeated (agenda=a, agenda=b / agenda[]=a).
+const getList = (formData: FormData, name: string): string[] => {
+  const values = [...formData.getAll(name), ...formData.getAll(`${name}[]`)].filter(
+    (v): v is string => typeof v === "string",
+  );
 
   return values
     .flatMap((value) => {
       try {
         const parsed: unknown = JSON.parse(value);
-        if (Array.isArray(parsed)) {
-          return parsed.filter((item): item is string => typeof item === "string");
-        }
+        if (Array.isArray(parsed)) return parsed.map(String);
       } catch {
-        // Not JSON: treat it as plain text below.
+        // Not JSON: treat as plain text.
       }
-      // A single value may be a comma or newline separated list;
-      // repeated keys already give one item per value.
       return values.length === 1 ? value.split(/[,\n]/) : [value];
     })
     .map((item) => item.trim())
     .filter(Boolean);
 };
 
-// Postman's "File" type sends the image as a File, not as text.
-const getImageFile = (fields: Fields): File | undefined =>
-  fields
-    .get("image")
-    ?.find((item): item is File => !isString(item) && item.size > 0);
+const validationDetails = (error: mongoose.Error.ValidationError) => ({
+  errors: Object.fromEntries(
+    Object.entries(error.errors).map(([field, detail]) => [field, detail.message]),
+  ),
+});
 
-const saveImage = async (file: File): Promise<string> => {
-  const fileName = `${randomUUID()}${IMAGE_EXTENSIONS[file.type]}`;
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  await writeFile(
-    path.join(UPLOAD_DIR, fileName),
-    Buffer.from(await file.arrayBuffer()),
-  );
-  return fileName;
-};
+const isDuplicateKeyError = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
+  let formData: FormData;
   try {
-    let fields: Fields;
+    formData = await req.formData();
+  } catch {
+    return fail(
+      400,
+      "Send the event as form-data (multipart/form-data). Don't set the Content-Type header by hand.",
+    );
+  }
+
+  const image = formData.get("image");
+  if (!(image instanceof File)) {
+    return fail(400, "Image file is required. In Postman, set the 'image' field type to File.");
+  }
+  if (image.size === 0) return fail(400, "The image is empty.");
+  if (image.size > MAX_IMAGE_BYTES) return fail(413, "The image must be 5 MB or smaller.");
+  if (!image.type.startsWith("image/")) {
+    return fail(400, "Invalid file type. Only image files are allowed.");
+  }
+
+  if (!configureCloudinary()) {
+    return fail(500, "Cloudinary is not configured on the server.");
+  }
+
+  try {
+    await connectDB();
+
+    const event = new Event({
+      title: getText(formData, "title"),
+      description: getText(formData, "description"),
+      overview: getText(formData, "overview"),
+      venue: getText(formData, "venue"),
+      location: getText(formData, "location"),
+      date: getText(formData, "date"),
+      time: getText(formData, "time"),
+      mode: getText(formData, "mode"),
+      audience: getText(formData, "audience"),
+      organizer: getText(formData, "organizer"),
+      agenda: getList(formData, "agenda"),
+      tags: getList(formData, "tags"),
+    });
+
+    // Validate everything except the image before uploading it, so a bad
+    // request never leaves an orphaned file in Cloudinary.
+    await event.validate({ pathsToSkip: ["image"] });
+
+    if (await Event.exists({ slug: event.slug })) {
+      return fail(409, "An event with this title already exists.");
+    }
+
+    let uploaded: UploadApiResponse;
     try {
-      fields = await readFields(request);
+      uploaded = await uploadImage(image);
     } catch (error) {
-      return NextResponse.json(
-        {
-          message:
-            error instanceof BadRequestError
-              ? error.message
-              : "Could not read the request body. Send it as form-data or JSON, and do not set the Content-Type header by hand.",
-        },
-        { status: 400 },
-      );
+      console.error("Cloudinary image upload failed:", error);
+      return fail(502, "Cloudinary could not upload the image.");
     }
 
-    const title = getText(fields, "title");
-    const description = getText(fields, "description");
-    const overview = getText(fields, "overview");
-    const imageFile = getImageFile(fields);
-    const imageUrl = getText(fields, "image") || getText(fields, "imageUrl");
-    const venue = getText(fields, "venue");
-    const location = getText(fields, "location");
-    const date = getText(fields, "date");
-    const time = getText(fields, "time");
-    const mode = getText(fields, "mode");
-    const audience = getText(fields, "audience");
-    const organizer = getText(fields, "organizer");
-    const agenda = getList(fields, "agenda");
-    // Tags are optional in the Event model (default: []).
-    const tags = getList(fields, "tags");
+    event.image = uploaded.secure_url;
 
-    const missingFields = Object.entries({
-      title,
-      description,
-      overview,
-      image: imageFile ?? imageUrl,
-      venue,
-      location,
-      date,
-      time,
-      mode,
-      audience,
-      organizer,
-      agenda,
-    })
-      .filter(([, value]) =>
-        Array.isArray(value) ? value.length === 0 : !value,
-      )
-      .map(([field]) => field);
-
-    if (missingFields.length > 0) {
-      return NextResponse.json(
-        {
-          message: "Missing required fields",
-          missingFields,
-          receivedFields: [...fields.keys()],
-        },
-        { status: 400 },
-      );
-    }
-
-    if (imageFile && !IMAGE_EXTENSIONS[imageFile.type]) {
-      return NextResponse.json(
-        { message: "Image must be a JPEG, PNG, WebP, GIF or AVIF file" },
-        { status: 400 },
-      );
-    }
-
-    if (imageFile && imageFile.size > MAX_IMAGE_BYTES) {
-      return NextResponse.json(
-        { message: "Image must be 5 MB or smaller" },
-        { status: 400 },
-      );
-    }
-
-    await connectToDatabase();
-
-    const uploadedImage = imageFile ? await saveImage(imageFile) : undefined;
-
-    let newEvent;
     try {
-      newEvent = await Event.create({
-        title,
-        description,
-        overview,
-        image: uploadedImage ? `/uploads/${uploadedImage}` : imageUrl,
-        venue,
-        location,
-        date,
-        time,
-        mode,
-        audience,
-        agenda,
-        organizer,
-        tags,
-      });
+      await event.save();
     } catch (error) {
-      // Don't leave an orphaned upload behind when the event is not saved.
-      if (uploadedImage) {
-        await unlink(path.join(UPLOAD_DIR, uploadedImage)).catch(() => {});
-      }
+      await cloudinary.uploader
+        .destroy(uploaded.public_id)
+        .catch((e) => console.error("Could not delete orphaned image:", e));
       throw error;
     }
 
     return NextResponse.json(
-      { message: "Event created successfully", event: newEvent },
+      { message: "Event created successfully", event },
       { status: 201 },
     );
   } catch (error) {
-    console.error("Event creation failed:", error);
-
     if (error instanceof mongoose.Error.ValidationError) {
-      return NextResponse.json(
-        {
-          message: "Event validation failed",
-          errors: Object.fromEntries(
-            Object.entries(error.errors).map(([field, detail]) => [
-              field,
-              detail.message,
-            ]),
-          ),
-        },
-        { status: 400 },
-      );
+      return fail(400, "Event validation failed", validationDetails(error));
+    }
+    if (isDuplicateKeyError(error)) {
+      return fail(409, "An event with this title already exists.");
     }
 
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === 11000
-    ) {
-      return NextResponse.json(
-        { message: "An event with this title already exists" },
-        { status: 409 },
-      );
-    }
+    console.error("Event creation failed:", error);
+    return fail(500, "Event creation failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+}
 
-    if (
-      error instanceof Error &&
-      (error.name === "MongooseServerSelectionError" ||
-        error.message.includes("querySrv") ||
-        error.message.includes("MongoServerSelectionError") ||
-        error.message.toLowerCase().includes("authentication failed") ||
-        error.message.toLowerCase().includes("bad auth"))
-    ) {
-      return NextResponse.json(
-        {
-          message: error.message.toLowerCase().includes("auth")
-            ? "Database authentication failed"
-            : "Database unavailable",
-          ...(process.env.NODE_ENV === "development" && {
-            detail: error.message,
-          }),
-        },
-        { status: 503 },
-      );
-    }
+export async function GET() {
+  try {
+    await connectDB();
+
+    const events = await Event.find().sort({ createdAt: -1 });
 
     return NextResponse.json(
-      {
-        message:
-          process.env.NODE_ENV === "development"
-            ? error instanceof Error
-              ? error.message
-              : "Event creation failed"
-            : "Event creation failed",
-      },
-      { status: 500 },
+      { message: "Events fetched successfully", events },
+      { status: 200 },
     );
+  } catch (error) {
+    console.error("Event fetching failed:", error);
+    return fail(500, "Event fetching failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 }
