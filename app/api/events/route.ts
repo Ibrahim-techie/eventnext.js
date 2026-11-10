@@ -43,15 +43,33 @@ async function uploadImage(file: File): Promise<UploadApiResponse> {
   });
 }
 
-const getText = (formData: FormData, name: string): string => {
-  const value = formData.get(name);
+// Every value sent for each key. Keys are normalized so stray spaces,
+// invisible characters, capitals or a trailing [] in Postman key names
+// ("date ", "Tags", "agenda[]") still match.
+type Fields = Map<string, FormDataEntryValue[]>;
+
+const readFields = (formData: FormData): Fields => {
+  const fields: Fields = new Map();
+  for (const [rawKey, value] of formData.entries()) {
+    const key = rawKey
+      .replace(/[​-‍﻿]/g, "")
+      .trim()
+      .replace(/\[\]$/, "")
+      .toLowerCase();
+    fields.set(key, [...(fields.get(key) ?? []), value]);
+  }
+  return fields;
+};
+
+const getText = (fields: Fields, name: string): string => {
+  const value = fields.get(name)?.find((v) => typeof v === "string");
   return typeof value === "string" ? value.trim() : "";
 };
 
 // Accepts a JSON array ('["a","b"]'), a comma/newline separated string
 // ("a, b"), or the same key repeated (agenda=a, agenda=b / agenda[]=a).
-const getList = (formData: FormData, name: string): string[] => {
-  const values = [...formData.getAll(name), ...formData.getAll(`${name}[]`)].filter(
+const getList = (fields: Fields, name: string): string[] => {
+  const values = (fields.get(name) ?? []).filter(
     (v): v is string => typeof v === "string",
   );
 
@@ -89,7 +107,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const image = formData.get("image");
+  const fields = readFields(formData);
+
+  const image =
+    fields.get("image")?.find((v) => v instanceof File) ?? fields.get("image")?.[0];
   if (!(image instanceof File)) {
     return fail(400, "Image file is required. In Postman, set the 'image' field type to File.");
   }
@@ -107,18 +128,18 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const event = new Event({
-      title: getText(formData, "title"),
-      description: getText(formData, "description"),
-      overview: getText(formData, "overview"),
-      venue: getText(formData, "venue"),
-      location: getText(formData, "location"),
-      date: getText(formData, "date"),
-      time: getText(formData, "time"),
-      mode: getText(formData, "mode"),
-      audience: getText(formData, "audience"),
-      organizer: getText(formData, "organizer"),
-      agenda: getList(formData, "agenda"),
-      tags: getList(formData, "tags"),
+      title: getText(fields, "title"),
+      description: getText(fields, "description"),
+      overview: getText(fields, "overview"),
+      venue: getText(fields, "venue"),
+      location: getText(fields, "location"),
+      date: getText(fields, "date"),
+      time: getText(fields, "time"),
+      mode: getText(fields, "mode"),
+      audience: getText(fields, "audience"),
+      organizer: getText(fields, "organizer"),
+      agenda: getList(fields, "agenda"),
+      tags: getList(fields, "tags"),
     });
 
     // Validate everything except the image before uploading it, so a bad
@@ -154,7 +175,11 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     if (error instanceof mongoose.Error.ValidationError) {
-      return fail(400, "Event validation failed", validationDetails(error));
+      return fail(400, "Event validation failed", {
+        ...validationDetails(error),
+        // Exact key names received, to spot typos in the request.
+        receivedFields: [...formData.keys()].map((k) => JSON.stringify(k)),
+      });
     }
     if (isDuplicateKeyError(error)) {
       return fail(409, "An event with this title already exists.");
@@ -184,3 +209,5 @@ export async function GET() {
     });
   }
 }
+
+

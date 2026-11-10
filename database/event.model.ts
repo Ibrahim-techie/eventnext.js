@@ -117,7 +117,7 @@ EventSchema.pre("validate", function () {
     else
       this.invalidate(
         "date",
-        'Invalid date. Use YYYY-MM-DD or "Month D, YYYY" (e.g. November 15, 2025)',
+        'Invalid date. Use YYYY-MM-DD, "Month D, YYYY" (e.g. November 15, 2025) or a range like "June 11-12, 2027"',
       );
   }
 
@@ -157,9 +157,35 @@ const MONTHS = [
   "december",
 ];
 
+// A single date or a range. Ranges are stored as "YYYY-MM-DD/YYYY-MM-DD".
+// Accepts "June 11-12, 2027", "June 30 - July 2, 2027",
+// "June 11, 2027 - June 12, 2027", "2027-06-11 to 2027-06-12".
+function normalizeDate(value: string): string | null {
+  const input = value.trim();
+
+  const compact = input.match(
+    /^([A-Za-z]+\.?)\s+(\d{1,2})\s*[-–]\s*(\d{1,2}),?\s+(\d{4})$/,
+  );
+  const expanded = input.match(
+    /^([A-Za-z]+\.?\s+\d{1,2})\s*[-–]\s*([A-Za-z]+\.?\s+\d{1,2}),?\s+(\d{4})$/,
+  );
+  const parts = compact
+    ? [`${compact[1]} ${compact[2]}, ${compact[4]}`, `${compact[1]} ${compact[3]}, ${compact[4]}`]
+    : expanded
+      ? [`${expanded[1]}, ${expanded[3]}`, `${expanded[2]}, ${expanded[3]}`]
+      : input.split(/\s*\/\s*|\s+[-–]\s+|\s+to\s+/i);
+
+  if (parts.length > 2) return null;
+  const dates = parts.map(normalizeSingleDate);
+  if (dates.some((d) => d === null)) return null;
+  if (dates.length === 2 && dates[1]! < dates[0]!) return null; // end before start
+
+  return dates.length === 2 && dates[0] === dates[1] ? dates[0] : dates.join("/");
+}
+
 // Parses the date as a calendar date (no timezone), so "November 15, 2025"
 // stays 2025-11-15 whatever the server's timezone is. Returns null if invalid.
-function normalizeDate(value: string): string | null {
+function normalizeSingleDate(value: string): string | null {
   const input = value.trim();
   let year: number;
   let month: number;
