@@ -1,6 +1,12 @@
-import mongoose, { type HydratedDocument, type Model } from "mongoose";
+import {
+  Schema,
+  model,
+  models,
+  type HydratedDocument,
+  type Model,
+} from "mongoose";
 
-export interface Event {
+export interface IEvent {
   title: string;
   slug: string;
   description: string;
@@ -19,193 +25,215 @@ export interface Event {
   updatedAt: Date;
 }
 
-export type EventDocument = HydratedDocument<Event>;
+export type EventDocument = HydratedDocument<IEvent>;
 
-const nonEmptyString = {
-  type: String,
-  required: true,
-  trim: true,
-  validate: {
-    validator: (value: string): boolean => value.trim().length > 0,
-    message: "Value cannot be empty",
-  },
-};
+const nonEmptyList = (label: string) => ({
+  validator: (v: string[]) =>
+    Array.isArray(v) && v.length > 0 && v.every((item) => item.trim() !== ""),
+  message: `At least one ${label} is required`,
+});
 
-const nonEmptyStringArray = {
-  type: [String],
-  required: true,
-  validate: {
-    validator: (value: string[]): boolean =>
-      Array.isArray(value) &&
-      value.length > 0 &&
-      value.every((item) => item.trim().length > 0),
-    message: "Array must contain at least one non-empty value",
-  },
-};
-
-const toSlug = (title: string): string =>
-  title
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const normalizeTime = (value: string): string => {
-  const trimmed = value.trim().toUpperCase();
-  const match = trimmed.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?$/);
-
-  if (!match) {
-    throw new Error("Event time must use HH:mm or a valid 12-hour time.");
-  }
-
-  const hour = Number(match[1]);
-  const minute = Number(match[2] ?? "00");
-  const meridiem = match[3];
-
-  if (minute > 59 || (meridiem && (hour < 1 || hour > 12)) || (!meridiem && hour > 23)) {
-    throw new Error("Event time is invalid.");
-  }
-
-  const normalizedHour =
-    meridiem === "AM"
-      ? hour === 12
-        ? 0
-        : hour
-      : meridiem === "PM"
-        ? hour === 12
-          ? 12
-          : hour + 12
-        : hour;
-
-  return `${String(normalizedHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-};
-
-const normalizeDate = (value: string): string => {
-  const trimmed = value.trim();
-  const compactRange = trimmed.match(
-    /^([A-Za-z]+)\s+(\d{1,2})-(\d{1,2}),\s*(\d{4})$/,
-  );
-  const expandedRange = trimmed.match(
-    /^([A-Za-z]+)\s+(\d{1,2})\s*-\s*([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/,
-  );
-
-  const toIsoDate = (date: string): string => {
-    const namedDate = date.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
-    const isoDate = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    let year: number;
-    let month: number;
-    let day: number;
-
-    if (namedDate) {
-      const monthIndex = [
-        "january",
-        "february",
-        "march",
-        "april",
-        "may",
-        "june",
-        "july",
-        "august",
-        "september",
-        "october",
-        "november",
-        "december",
-      ].indexOf(namedDate[1].toLowerCase());
-      year = Number(namedDate[3]);
-      month = monthIndex;
-      day = Number(namedDate[2]);
-    } else if (isoDate) {
-      year = Number(isoDate[1]);
-      month = Number(isoDate[2]) - 1;
-      day = Number(isoDate[3]);
-    } else {
-      throw new Error("Event date must be a valid date.");
-    }
-
-    const parsedDate = new Date(Date.UTC(year, month, day));
-    if (
-      Number.isNaN(parsedDate.getTime()) ||
-      parsedDate.getUTCFullYear() !== year ||
-      parsedDate.getUTCMonth() !== month ||
-      parsedDate.getUTCDate() !== day
-    ) {
-      throw new Error("Event date must be a valid date.");
-    }
-
-    return parsedDate.toISOString().slice(0, 10);
-  };
-
-  if (compactRange) {
-    const [, month, startDay, endDay, year] = compactRange;
-    return `${toIsoDate(`${month} ${startDay}, ${year}`)}/${toIsoDate(
-      `${month} ${endDay}, ${year}`,
-    )}`;
-  }
-
-  if (expandedRange) {
-    const [, startMonth, startDay, endMonth, endDay, year] = expandedRange;
-    return `${toIsoDate(`${startMonth} ${startDay}, ${year}`)}/${toIsoDate(
-      `${endMonth} ${endDay}, ${year}`,
-    )}`;
-  }
-
-  return toIsoDate(trimmed);
-};
-
-const normalizeTimeRange = (value: string): string => {
-  const parts = value
-    .trim()
-    .split(/\s+[-–]\s+/)
-    .map((part) => normalizeTime(part));
-
-  if (parts.length > 2 || parts.length === 0) {
-    throw new Error("Event time must be a valid time or time range.");
-  }
-
-  return parts.join(" - ");
-};
-
-const eventSchema = new mongoose.Schema<Event>(
+const EventSchema = new Schema<IEvent>(
   {
-    title: nonEmptyString,
-    slug: { type: String, trim: true },
-    description: nonEmptyString,
-    overview: nonEmptyString,
-    image: nonEmptyString,
-    venue: nonEmptyString,
-    location: nonEmptyString,
-    date: nonEmptyString,
-    time: nonEmptyString,
-    mode: nonEmptyString,
-    audience: nonEmptyString,
-    agenda: nonEmptyStringArray,
-    organizer: nonEmptyString,
-    tags: { type: [String], default: [] },
+    title: {
+      type: String,
+      required: [true, "Title is required"],
+      trim: true,
+      maxlength: [100, "Title cannot exceed 100 characters"],
+    },
+    // The unique index is declared once, below.
+    slug: { type: String, lowercase: true, trim: true },
+    description: {
+      type: String,
+      required: [true, "Description is required"],
+      trim: true,
+      maxlength: [1000, "Description cannot exceed 1000 characters"],
+    },
+    overview: {
+      type: String,
+      required: [true, "Overview is required"],
+      trim: true,
+      maxlength: [500, "Overview cannot exceed 500 characters"],
+    },
+    image: {
+      type: String,
+      required: [true, "Image URL is required"],
+      trim: true,
+    },
+    venue: { type: String, required: [true, "Venue is required"], trim: true },
+    location: {
+      type: String,
+      required: [true, "Location is required"],
+      trim: true,
+    },
+    date: { type: String, required: [true, "Date is required"], trim: true },
+    time: { type: String, required: [true, "Time is required"], trim: true },
+    mode: {
+      type: String,
+      required: [true, "Mode is required"],
+      lowercase: true,
+      trim: true,
+      enum: {
+        values: ["online", "offline", "hybrid"],
+        message: "Mode must be either online, offline, or hybrid",
+      },
+    },
+    audience: {
+      type: String,
+      required: [true, "Audience is required"],
+      trim: true,
+    },
+    agenda: {
+      type: [String],
+      required: [true, "Agenda is required"],
+      validate: nonEmptyList("agenda item"),
+    },
+    organizer: {
+      type: String,
+      required: [true, "Organizer is required"],
+      trim: true,
+    },
+    tags: {
+      type: [String],
+      required: [true, "Tags are required"],
+      validate: nonEmptyList("tag"),
+    },
   },
   { timestamps: true },
 );
 
-eventSchema.index({ slug: 1 }, { unique: true });
-
-eventSchema.pre("save", async function () {
-  // Regenerate the URL slug only when its source title changes.
-  if (this.isModified("title") || !this.slug) {
-    const slug = toSlug(this.title);
-    if (!slug) {
-      throw new Error("Event title must contain letters or numbers.");
-    }
-    this.slug = slug;
+// Runs before validation (doc.validate() and save()), so bad dates/times
+// surface as ValidationErrors instead of crashing the request.
+EventSchema.pre("validate", function () {
+  if (this.title && (this.isModified("title") || this.isNew)) {
+    const slug = generateSlug(this.title);
+    if (slug) this.slug = slug;
+    else this.invalidate("title", "Title must contain letters or numbers");
   }
 
-  // Preserve ranges while storing each date and time endpoint consistently.
-  this.date = normalizeDate(this.date);
-  this.time = normalizeTimeRange(this.time);
+  if (this.date && this.isModified("date")) {
+    const date = normalizeDate(this.date);
+    if (date) this.date = date;
+    else
+      this.invalidate(
+        "date",
+        'Invalid date. Use YYYY-MM-DD or "Month D, YYYY" (e.g. November 15, 2025)',
+      );
+  }
+
+  if (this.time && this.isModified("time")) {
+    const time = normalizeTimeRange(this.time);
+    if (time) this.time = time;
+    else
+      this.invalidate(
+        "time",
+        'Invalid time. Use HH:MM, "H:MM AM", "H AM", or a range like "10:00 AM - 12:00 PM"',
+      );
+  }
 });
 
-export const Event: Model<Event> =
-  (mongoose.models.Event as Model<Event> | undefined) ??
-  mongoose.model<Event>("Event", eventSchema);
+function generateSlug(title: string): string {
+  return title
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "") // strip accents
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+
+// Parses the date as a calendar date (no timezone), so "November 15, 2025"
+// stays 2025-11-15 whatever the server's timezone is. Returns null if invalid.
+function normalizeDate(value: string): string | null {
+  const input = value.trim();
+  let year: number;
+  let month: number;
+  let day: number;
+
+  const iso = input.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const named = input.match(/^([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/);
+
+  if (iso) {
+    year = Number(iso[1]);
+    month = Number(iso[2]) - 1;
+    day = Number(iso[3]);
+  } else if (named) {
+    const name = named[1].toLowerCase();
+    month = MONTHS.findIndex((m) => name.length >= 3 && m.startsWith(name));
+    day = Number(named[2]);
+    year = Number(named[3]);
+  } else {
+    return null;
+  }
+
+  const date = new Date(Date.UTC(year, month, day));
+  if (
+    month < 0 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+// "14:30", "2:30 PM", "2 PM" -> "HH:MM" (24-hour). Returns null if invalid.
+function normalizeTime(value: string): string | null {
+  const match = value.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*([AP]\.?M\.?)?$/i);
+  if (!match) return null;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] ?? "0");
+  const period = match[3]?.replace(/\./g, "").toUpperCase();
+
+  // Without AM/PM, minutes are required ("14" alone is ambiguous).
+  if (!period && match[2] === undefined) return null;
+  if (minutes > 59) return null;
+
+  if (period) {
+    if (hours < 1 || hours > 12) return null;
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+  } else if (hours > 23) {
+    return null;
+  }
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+// A single time or a "start - end" range.
+function normalizeTimeRange(value: string): string | null {
+  const parts = value.split(/\s*[-–]\s*|\s+to\s+/i);
+  if (parts.length > 2) return null;
+
+  const times = parts.map(normalizeTime);
+  if (times.some((t) => t === null)) return null;
+
+  return times.join(" - ");
+}
+
+EventSchema.index({ slug: 1 }, { unique: true });
+EventSchema.index({ date: 1, mode: 1 });
+
+const Event =
+  (models.Event as Model<IEvent> | undefined) ??
+  model<IEvent>("Event", EventSchema);
 
 export default Event;

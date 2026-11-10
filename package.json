@@ -12,6 +12,7 @@
     "@base-ui/react": "^1.9.0",
     "@phosphor-icons/react": "^2.1.10",
     "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.11.0",
     "cn": "^0.5.2",
     "mongoose": "^8.19.1",
     "next": "16.4.5",
