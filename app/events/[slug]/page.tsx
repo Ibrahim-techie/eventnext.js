@@ -18,24 +18,44 @@ type EventApiResponse = {
 };
 
 async function getEvent(slug: string): Promise<EventDetailsProps | null> {
-  if (!isValidSlug(slug)) return null;
+  if (!isValidSlug(slug)) {
+    return null;
+  }
 
   const baseUrl = process.env.NEXT_PUBLIC_URL;
+
   if (!baseUrl) {
     throw new Error("NEXT_PUBLIC_URL is not configured.");
   }
 
-  const response = await fetch(
-    `${baseUrl.replace(/\/$/, "")}/api/events/${encodeURIComponent(slug)}`,
-  );
+  try {
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/events/${encodeURIComponent(slug)}`,
+      {
+        next: {
+          revalidate: 60,
+        },
+      },
+    );
 
-  if (response.status === 404) return null;
-  if (!response.ok) {
-    throw new Error(`Event API request failed with status ${response.status}.`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        return null;
+      }
+
+      throw new Error(`Failed to fetch event. Status: ${response.status}`);
+    }
+
+    const { event }: EventApiResponse = await response.json();
+
+    return event;
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("Error occurred while fetching event data:", error);
+    }
+
+    return null;
   }
-
-  const result = (await response.json()) as EventApiResponse;
-  return result.event;
 }
 
 export default async function EventPage({ params }: EventPageProps) {
