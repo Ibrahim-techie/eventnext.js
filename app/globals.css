@@ -209,14 +209,14 @@
 
   #event {
     .header {
-      @apply flex w-2/3 flex-col items-start gap-4 max-lg:w-full mb-10;
+      @apply mb-10 flex w-2/3 flex-col items-start gap-4 max-lg:w-full;
     }
 
     .details {
-      @apply flex w-full flex-col lg:flex-row gap-12 items-start mt-12 max-lg:items-center;
+      @apply mt-12 flex w-full items-start gap-12 max-lg:flex-col max-lg:items-center;
 
       .content {
-        @apply flex flex-[2] flex-col gap-8 max-lg:w-full;
+        @apply flex flex-[2] flex-col gap-10 max-lg:w-full;
 
         .banner {
           @apply max-h-[457px] w-full rounded-lg object-cover;
@@ -231,13 +231,49 @@
             }
           }
         }
+
+        .copy, .organizer {
+          @apply flex flex-col gap-3;
+        }
+
+        .event-facts {
+          @apply flex flex-col gap-4;
+        }
+
+        .facts-grid {
+          @apply grid grid-cols-1 gap-3;
+
+          div {
+            @apply flex flex-row items-center gap-3;
+          }
+        }
+
+        .organizer {
+          @apply gap-4;
+        }
+
+        .tag-list {
+          @apply flex flex-row flex-wrap gap-2;
+        }
       }
 
       .booking {
-        @apply flex-1 w-full p-4 border-l border-gray-700;
+        @apply sticky top-24 flex-1 w-full max-w-sm max-lg:static max-lg:max-w-none;
 
         .signup-card {
-          @apply bg-dark-100 border-dark-200 card-shadow flex w-full flex-col gap-6 rounded-[10px] border px-5 py-6;
+          @apply bg-dark-100 border-dark-200 card-shadow flex w-full flex-col gap-4 rounded-[10px] border px-5 py-6;
+
+          .booking-copy {
+            @apply text-sm;
+          }
+
+          label {
+            @apply text-sm text-light-100;
+          }
+
+          .booking-status {
+            @apply text-sm text-primary;
+          }
         }
       }
     }
@@ -248,6 +284,10 @@
 
     p {
       @apply text-light-100 text-lg max-sm:text-sm;
+    }
+
+    .similar-events {
+      @apply mt-20 flex flex-col gap-6;
     }
 
     .flex-col-gap-2 {
@@ -266,20 +306,12 @@
   #book-event {
     @apply flex flex-col gap-6;
 
-    form {
-      @apply flex flex-col gap-6;
+    input {
+      @apply bg-dark-200 rounded-[6px] px-5 py-2.5;
+    }
 
-      div {
-        @apply flex flex-col gap-2;
-
-        input {
-          @apply bg-dark-200 rounded-[6px] px-5 py-2.5;
-        }
-      }
-
-      button {
-        @apply bg-primary hover:bg-primary/90 w-full cursor-pointer items-center justify-center rounded-[6px] px-4 py-2.5 text-lg font-semibold text-black;
-      }
+    button {
+      @apply bg-primary hover:bg-primary/90 w-full cursor-pointer items-center justify-center rounded-[6px] px-4 py-2.5 text-lg font-semibold text-black;
     }
   }
 }
