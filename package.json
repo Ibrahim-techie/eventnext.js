@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:events": "node --env-file=.env scripts/seed-events.mjs",
+    "post:events": "node --env-file=.env scripts/post-events.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
