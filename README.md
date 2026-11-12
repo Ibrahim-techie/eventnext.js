@@ -25,6 +25,25 @@ technology events:
 npm run seed:events
 ```
 
+## Booking confirmation email
+
+Booking confirmations use the existing Nodemailer transporter and Mailgen
+template. Configure these server-side environment variables before using
+bookings:
+
+```env
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Optional branding variables are `MAIL_PRODUCT_NAME`, `MAIL_COPYRIGHT`, and
+`NEXT_PUBLIC_APP_LOGO`. `NEXT_PUBLIC_URL` remains supported as a fallback for
+the application URL.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

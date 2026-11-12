@@ -232,7 +232,8 @@
           }
         }
 
-        .copy, .organizer {
+        .copy,
+        .organizer {
           @apply flex flex-col gap-3;
         }
 
