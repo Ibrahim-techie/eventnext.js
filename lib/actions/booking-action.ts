@@ -44,6 +44,8 @@ export const createBooking = async (email: string, eventId: string) => {
       eventId: validatedEventId,
     });
 
+    let recipientRejected = false;
+
     try {
       const email = createBookingConfirmationEmail({
         email: validatedEmail,
@@ -58,6 +60,11 @@ export const createBooking = async (email: string, eventId: string) => {
       });
 
       if (mailResult.rejected.length > 0) {
+        recipientRejected = mailResult.rejected.some(
+          (recipient) =>
+            recipient.toLowerCase() === validatedEmail.toLowerCase(),
+        );
+
         console.error("Booking confirmation email was rejected.", {
           email: validatedEmail,
           eventId: validatedEventId,
@@ -84,7 +91,9 @@ export const createBooking = async (email: string, eventId: string) => {
 
       return {
         success: false,
-        message: "Please provide a valid email address to book your spot.",
+        message: recipientRejected
+          ? "Please provide a valid email address to book your spot."
+          : "Your booking could not be completed because the confirmation email could not be delivered. Please try again later.",
       };
     }
 
