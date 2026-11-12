@@ -37,7 +37,9 @@ export async function GET(
   try {
     await connectDB();
 
-    const event = await Event.findOne({ slug }).lean();
+    const event = await Event.findOne({ slug })
+      .select("-__v")
+      .lean();
 
     if (!event) {
       return NextResponse.json({ message: "Event not found." }, { status: 404 });

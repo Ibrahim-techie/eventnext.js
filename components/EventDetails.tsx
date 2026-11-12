@@ -66,6 +66,7 @@ const EventDetails = async ({
             alt={`${title} event banner`}
             width={1200}
             height={675}
+            sizes="(max-width: 1024px) 100vw, 66vw"
             priority
           />
 

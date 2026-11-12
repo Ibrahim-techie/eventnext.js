@@ -26,6 +26,7 @@ const EeventCard = ({
         alt={title}
         width={400}
         height={200}
+        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
         className="poster transition-transform duration-300 group-hover:scale-[1.02]"
       />
 

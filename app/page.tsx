@@ -32,7 +32,7 @@ const page = async () => {
             <p className="text-center">No Events Found</p>
           ) : (
             events.map((event) => (
-              <li key={event.title}>
+              <li key={event.slug}>
                 <EeventCard
                   title={event.title}
                   imageUrl={event.image}
