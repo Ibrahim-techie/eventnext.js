@@ -2,8 +2,13 @@
 import EeventCard from "@/components/EeventCard";
 import { Explorebtn } from "@/components/Explorebtn";
 import { IEvent } from "@/database/event.model";
-
+import { cacheLife, cacheTag } from "next/cache";
 const page = async () => {
+  "use cache";
+
+  cacheLife("hours");
+  cacheTag("events");
+
       let events: IEvent[] = [];
   try {
     const res = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/events`);

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import EventDetails, {
   type EventDetailsProps,
 } from "@/components/EventDetails";
+import { cacheLife } from "next/cache";
+import { cacheTag } from "next/cache";
 
 export const instant = false;
 
@@ -18,6 +20,12 @@ type EventApiResponse = {
 };
 
 async function getEvent(slug: string): Promise<EventDetailsProps | null> {
+
+    "use cache";
+
+  cacheLife("hours");
+  cacheTag(`event-${slug}`);
+
   if (!isValidSlug(slug)) {
     return null;
   }
@@ -31,11 +39,6 @@ async function getEvent(slug: string): Promise<EventDetailsProps | null> {
   try {
     const response = await fetch(
       `${baseUrl.replace(/\/$/, "")}/api/events/${encodeURIComponent(slug)}`,
-      {
-        next: {
-          revalidate: 60,
-        },
-      },
     );
 
     if (!response.ok) {

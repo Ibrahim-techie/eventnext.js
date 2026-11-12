@@ -4,6 +4,7 @@ import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
 import connectDB from "@/lib/mongodb";
 import Event from "@/database/event.model";
+import { revalidateTag } from "next/cache";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -162,6 +163,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await event.save();
+       revalidateTag("events", "max");
     } catch (error) {
       await cloudinary.uploader
         .destroy(uploaded.public_id)

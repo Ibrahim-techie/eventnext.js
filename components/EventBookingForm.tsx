@@ -1,37 +1,34 @@
 "use client";
 
 import { SubmitEvent, useState } from "react";
+import { createBooking } from "@/lib/actions/booking-action";
 
 type EventBookingFormProps = {
   eventId?: string;
-  eventSlug: string;
 };
 
-const EventBookingForm = ({ eventId, eventSlug }: EventBookingFormProps) => {
+const EventBookingForm = ({ eventId }: EventBookingFormProps) => {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string | null>(null);
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setStatus(null);
+
+    if (!eventId) {
+      setStatus("This event is not available for booking.");
+      return;
+    }
 
     try {
-      const response = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, eventId, eventSlug }),
-      });
-
-      const result = (await response.json()) as { message?: string };
+      const result = await createBooking(email, eventId);
+      setEmail("");
+      setStatus(result.message);
+    } catch (error) {
       setStatus(
-        response.ok
-          ? result.message ?? "Your spot has been booked."
-          : result.message ?? "Unable to book your spot.",
+        error instanceof Error
+          ? error.message
+          : "Unable to book your spot. Please try again.",
       );
-
-      if (response.ok) setEmail("");
-    } catch {
-      setStatus("Unable to reach the booking service. Please try again.");
     }
   };
 
@@ -52,9 +49,14 @@ const EventBookingForm = ({ eventId, eventSlug }: EventBookingFormProps) => {
           placeholder="Enter your email"
           required
         />
+
         <button type="submit">Submit</button>
       </form>
-      {status && <p className="booking-status" role="status">{status}</p>}
+      {status && (
+        <p className="booking-status" role="status">
+          {status}
+        </p>
+      )}
     </div>
   );
 };

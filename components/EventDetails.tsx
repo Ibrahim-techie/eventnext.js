@@ -18,7 +18,6 @@ export interface EventDetailsProps {
   organizer: string;
   tags: string[];
   image: string;
-  slug?: string;
 }
 
 type SimilarEvent = {
@@ -46,7 +45,6 @@ const EventDetails = async ({
   tags,
   image,
   _id,
-  slug,
 }: EventDetailsProps) => {
   const similarEventsResult = _id
     ? await getSimilarEventsByTags(_id)
@@ -111,7 +109,7 @@ const EventDetails = async ({
         </div>
 
         <aside className="booking" aria-label="Book this event">
-          <EventBookingForm eventId={_id} eventSlug={slug ?? title} />
+          <EventBookingForm eventId={_id} />
         </aside>
       </div>
 
