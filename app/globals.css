@@ -364,3 +364,32 @@
     }
   }
 }
+
+.nav-link {
+  position: relative;
+  color: #bdbdbd;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 2px;
+  background-color: #59deca;
+
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+
+.nav-link.active {
+  color: #59deca;
+}
+
+.nav-link.active::after {
+  transform: scaleX(1);
+}
