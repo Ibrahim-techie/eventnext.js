@@ -108,7 +108,10 @@ export const createBooking = async (email: string, eventId: string) => {
       "code" in error &&
       error.code === 11000
     ) {
-      throw new Error("This email has already booked this event.");
+      return {
+        success: false,
+        message: "This email has already booked this event.",
+      };
     }
 
     console.error("Error creating booking:", error);
