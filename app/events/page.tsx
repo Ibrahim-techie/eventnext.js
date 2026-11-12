@@ -6,9 +6,15 @@ import { cacheLife, cacheTag } from "next/cache";
 
 type EventsResponse = {
   events?: IEvent[];
+  message?: string;
 };
 
-async function getEvents(): Promise<IEvent[]> {
+type EventsResult = {
+  events: IEvent[];
+  error: string | null;
+};
+
+async function getEvents(): Promise<EventsResult> {
   "use cache";
 
   cacheLife("hours");
@@ -20,19 +26,31 @@ async function getEvents(): Promise<IEvent[]> {
     );
 
     if (!response.ok) {
-      throw new Error(`Event request failed with status ${response.status}.`);
+      const result = (await response.json().catch(() => null)) as
+        | EventsResponse
+        | null;
+      throw new Error(
+        result?.message ??
+          `Event request failed with status ${response.status}.`,
+      );
     }
 
     const result = (await response.json()) as EventsResponse;
-    return result.events ?? [];
+    return { events: result.events ?? [], error: null };
   } catch (error) {
     console.error("Error fetching events:", error);
-    return [];
+    return {
+      events: [],
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unable to load events. Please try again later.",
+    };
   }
 }
 
 export default async function EventsPage() {
-  const events = await getEvents();
+  const { events, error } = await getEvents();
 
   return (
     <section className="events-page">
@@ -48,10 +66,15 @@ export default async function EventsPage() {
       <div className="events-page-list">
         <div className="events-page-list-heading">
           <h2>Upcoming events</h2>
-          <span>{events.length} events</span>
+          {!error && <span>{events.length} events</span>}
         </div>
 
-        {events.length === 0 ? (
+        {error ? (
+          <div className="events-error" role="alert">
+            <strong>Unable to load events.</strong>
+            <span>{error}</span>
+          </div>
+        ) : events.length === 0 ? (
           <p className="events-empty">No events found.</p>
         ) : (
           <ul className="events">

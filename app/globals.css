@@ -173,6 +173,18 @@
     .events-empty {
       @apply text-light-200 py-16 text-center;
     }
+
+    .events-error {
+      @apply bg-dark-100 border-border-dark flex flex-col gap-2 rounded-lg border px-5 py-6 text-center;
+
+      strong {
+        @apply text-primary;
+      }
+
+      span {
+        @apply text-light-200 text-sm;
+      }
+    }
   }
 
   #explore-btn {
