@@ -1,22 +1,13 @@
 "use cache";
 import EeventCard from "@/components/EeventCard";
 import { Explorebtn } from "@/components/Explorebtn";
-import { IEvent } from "@/database/event.model";
-import { cacheLife, cacheTag } from "next/cache";
+import { getEvents, type EventCardData } from "@/lib/events";
 const page = async () => {
   "use cache";
 
-  cacheLife("hours");
-  cacheTag("events");
-
-      let events: IEvent[] = [];
+  let events: EventCardData[] = [];
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/events`);
-
-    if (res.ok) {
-      const result = await res.json();
-      events = result.events;
-    }
+    events = await getEvents();
   } catch (err) {
     console.error("Error fetching events:", err);
   }
@@ -40,7 +31,7 @@ const page = async () => {
           {events.length == 0 ? (
             <p className="text-center">No Events Found</p>
           ) : (
-            events.map((event: IEvent) => (
+            events.map((event) => (
               <li key={event.title}>
                 <EeventCard
                   title={event.title}

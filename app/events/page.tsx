@@ -1,56 +1,21 @@
 "use cache";
 
 import EeventCard from "@/components/EeventCard";
-import type { IEvent } from "@/database/event.model";
-import { cacheLife, cacheTag } from "next/cache";
-
-type EventsResponse = {
-  events?: IEvent[];
-  message?: string;
-};
-
-type EventsResult = {
-  events: IEvent[];
-  error: string | null;
-};
-
-async function getEvents(): Promise<EventsResult> {
-  "use cache";
-
-  cacheLife("hours");
-  cacheTag("events");
-
-  try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_URL ?? "http://localhost:3000"}/api/events`,
-    );
-
-    if (!response.ok) {
-      const result = (await response.json().catch(() => null)) as
-        | EventsResponse
-        | null;
-      throw new Error(
-        result?.message ??
-          `Event request failed with status ${response.status}.`,
-      );
-    }
-
-    const result = (await response.json()) as EventsResponse;
-    return { events: result.events ?? [], error: null };
-  } catch (error) {
-    console.error("Error fetching events:", error);
-    return {
-      events: [],
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unable to load events. Please try again later.",
-    };
-  }
-}
+import { getEvents, type EventCardData } from "@/lib/events";
 
 export default async function EventsPage() {
-  const { events, error } = await getEvents();
+  let events: EventCardData[] = [];
+  let error: string | null = null;
+
+  try {
+    events = await getEvents();
+  } catch (cause) {
+    console.error("Error loading events:", cause);
+    error =
+      cause instanceof Error
+        ? cause.message
+        : "Unable to load events. Please try again later.";
+  }
 
   return (
     <section className="events-page">
